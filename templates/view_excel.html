@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>📊 Payback Viewer</h2>
+<p><strong>File:</strong> {{ filename }}</p>
+
+<div id="viewer-container"
+     style="overflow:auto; max-height:80vh; border:1px solid #ccc; border-radius:6px; background:white; padding:10px;">
+  <em>Caricamento in corso…</em>
+</div>
+
+<hr>
+<div style="margin-top:1em;">
+  <a href="{{ url_for('files', filename=filename) }}" class="btn">⬇️ Scarica originale</a>
+  <a href="{{ request.referrer or url_for('dashboard') }}" class="btn">⬅️ Torna</a>
+</div>
+
+<!-- ✅ Carica la libreria XLSX in locale -->
+<script src="{{ url_for('static', filename='js/xlsx.full.min.js') }}"></script>
+
+<script>
+function renderPayback() {
+  const filename = "{{ filename }}";
+  const fileUrl = `/static/uploads/${encodeURIComponent(filename)}`;
+  const container = document.getElementById("viewer-container");
+
+  fetch(fileUrl)
+    .then(response => {
+      if (!response.ok) throw new Error("File non trovato o accesso negato.");
+      return response.arrayBuffer();
+    })
+    .then(arrayBuffer => {
+      if (typeof XLSX === "undefined") throw new Error("Libreria XLSX non disponibile.");
+      const workbook = XLSX.read(arrayBuffer, { type: "array" });
+
+      // 🔍 Cerca la scheda contenente "Payback"
+      const paybackSheet = workbook.SheetNames.find(name =>
+        name.toLowerCase().includes("payback")
+      );
+
+      if (!paybackSheet) {
+        container.innerHTML = "<p style='color:#b00'>⚠️ Nessuna scheda 'Payback' trovata nel file.</p>";
+        return;
+      }
+
+      const worksheet = workbook.Sheets[paybackSheet];
+      const html = XLSX.utils.sheet_to_html(worksheet, { id: "payback-table", editable: false });
+      container.innerHTML = html;
+
+      // 🔹 Stile leggibile
+      const table = container.querySelector("table");
+      if (table) {
+        table.style.borderCollapse = "collapse";
+        table.style.width = "100%";
+        table.style.fontFamily = "Arial, sans-serif";
+        table.querySelectorAll("th, td").forEach(td => {
+          td.style.border = "1px solid #ddd";
+          td.style.padding = "4px 6px";
+          td.style.fontSize = "13px";
+        });
+        table.querySelectorAll("th").forEach(th => {
+          th.style.backgroundColor = "#f4f6f7";
+          th.style.fontWeight = "bold";
+        });
+      }
+    })
+    .catch(err => {
+      container.innerHTML =
+        `<p style='color:#b00'>❌ Errore nel caricamento del file: ${err.message}</p>`;
+    });
+}
+
+// ✅ Avvio dopo caricamento DOM
+document.addEventListener("DOMContentLoaded", renderPayback);
+</script>
+
+{% endblock %}

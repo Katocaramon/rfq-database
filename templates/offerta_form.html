@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>{{ 'Modifica Offerta' if item else 'Nuova Offerta' }}</h2>
+
+<!-- Form principale Offerta -->
+<form method="post">
+  <input type="hidden" name="id" value="{{ item.id if item else '' }}">
+
+  <label>Codice PM
+    <input name="codice_pm" value="{{ item.codice_pm if item else '' }}" required>
+  </label>
+
+  <label>Revisione
+    <input name="id_offerta_rev" type="number" min="1"
+           value="{{ item.id_offerta_rev if item else suggested_rev }}" required>
+  </label>
+
+  <label>Versione
+    <input name="versione" value="{{ item.versione if item else '' }}">
+  </label>
+
+  <label>Stato
+    <select name="stato">
+      <option value="attiva" {% if not item or item.stato == 'attiva' %}selected{% endif %}>attiva</option>
+      <option value="passata" {% if item and item.stato == 'passata' %}selected{% endif %}>passata</option>
+    </select>
+  </label>
+
+  <label>Data offerta
+    <input type="date" name="data_offerta"
+           value="{% if item and item.data_offerta %}{{ item.data_offerta.strftime('%Y-%m-%d') }}{% else %}{{ now().strftime('%Y-%m-%d') }}{% endif %}"
+           required>
+  </label>
+
+  <fieldset style="margin-top:1em">
+    <legend>SOP 0 – SOP +4 (Prezzo / Volume / GM %)</legend>
+    <table class="thin">
+      <tr><th>Fase</th><th>Prezzo (€)</th><th>Volume (pz)</th><th>GM %</th></tr>
+      {% for suf in ['', '1', '2', '3', '4'] %}
+      <tr>
+        <td>SOP{{ suf }}</td>
+        <td>
+          <input name="prezzo_sop{{ suf }}" type="number" step="0.01" min="0"
+                 value="{{ item.__dict__['prezzo_sop' + suf] if item and ('prezzo_sop' + suf) in item.__dict__ else '' }}"
+                 placeholder="€/pz">
+        </td>
+        <td>
+          <input name="vol_sop{{ suf }}" type="number" min="0" step="1"
+                 value="{{ item.__dict__['vol_sop' + suf] if item and ('vol_sop' + suf) in item.__dict__ else '' }}"
+                 placeholder="pz">
+        </td>
+        <td>
+          <input name="gm_sop{{ suf }}" type="number" step="0.01" min="0" max="100"
+                 value="{{ item.__dict__['gm_sop' + suf] if item and ('gm_sop' + suf) in item.__dict__ else '' }}"
+                 placeholder="%">
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </fieldset>
+
+  <div style="margin-top:1.2em; display:flex; gap:1em; align-items:center;">
+    <button type="submit">💾 Salva</button>
+    {% if rfq_id %}
+      <a class="btn" href="{{ url_for('rfq_detail', rfq_id=rfq_id) }}">Annulla</a>
+    {% endif %}
+  </div>
+</form>
+
+<hr style="margin:2em 0 1em;">
+
+<h3>📎 Allegati e Importazione da Excel</h3>
+
+<div class="form-grid" style="margin-top:1em;">
+
+  {% if item %}
+  <!-- Upload allegato -->
+  <form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data">
+    <input type="hidden" name="offerta_id" value="{{ item.id }}">
+    <label>Carica allegato (PDF, Excel, immagini...)
+      <input type="file" name="file" required>
+    </label>
+    <button type="submit">📤 Carica Allegato</button>
+  </form>
+  {% else %}
+  <p style="color:#777;">🔒 Gli allegati saranno disponibili dopo aver salvato l’offerta.</p>
+  {% endif %}
+
+  <!-- Import Excel -->
+  <form method="post" action="{{ url_for('import_offerta_excel', rfq_id=rfq_id) }}" enctype="multipart/form-data">
+    <label>Importa dati da template Excel (.xlsx)
+      <input type="file" name="file" accept=".xlsx" required>
+    </label>
+    <div style="display:flex;gap:0.6em;align-items:center;">
+      <button type="submit">📥 Importa Excel</button>
+      <a class="btn" href="{{ url_for('download_offerta_template') }}">📄 Template vuoto</a>
+      <a class="btn" href="{{ url_for('static', filename='templates/offerta_template_bosch.xlsx') }}">🏭 Esempio Bosch</a>
+    </div>
+  </form>
+
+</div>
+{% endblock %}

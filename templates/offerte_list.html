@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>📦 Offerte</h2>
+
+<form method="get" class="form-grid" style="margin-bottom:1.2em">
+  <input name="cliente" value="{{ f.cliente }}" placeholder="Cliente">
+  <input name="progetto" value="{{ f.progetto }}" placeholder="Progetto">
+  <label>Dal <input type="date" name="dal" value="{{ f.dal }}"></label>
+  <label>Al <input type="date" name="al" value="{{ f.al }}"></label>
+  <button type="submit">🔍 Filtra</button>
+</form>
+
+{% if items %}
+  <table class="offers-table">
+    <thead>
+      <tr>
+        <th>Cliente</th>
+        <th>Progetto</th>
+        <th>Rev</th>
+        <th>Stato</th>
+        <th>Data offerta</th>
+        <th>Fatturato medio annuo<br><small>(K$)</small></th>
+        <th>GM% medio annuo</th>
+        <th>Azioni</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for o in items %}
+        {% set fatturati = [o.fatt_sop, o.fatt_sop1, o.fatt_sop2, o.fatt_sop3, o.fatt_sop4] | select('number') | list %}
+        {% set gm_values = [o.gm_sop, o.gm_sop1, o.gm_sop2, o.gm_sop3, o.gm_sop4] | select('number') | list %}
+        {% set fatt_medio = (fatturati | sum / (fatturati|length if fatturati|length > 0 else 1)) / 1000 %}
+        {% set gm_medio = gm_values | sum / (gm_values|length if gm_values|length > 0 else 1) %}
+      <tr>
+        <td>{{ o.rfq.nome_cliente }}</td>
+        <td><a href="{{ url_for('rfq_detail', rfq_id=o.rfq_id) }}">{{ o.rfq.nome_progetto }}</a></td>
+        <td>{{ o.id_offerta_rev }}</td>
+        <td>
+          {% if o.stato == 'attiva' %}
+            <span class="stato-attiva">{{ o.stato }}</span>
+          {% else %}
+            <span class="stato-passata">{{ o.stato }}</span>
+          {% endif %}
+        </td>
+        <td>{{ o.data_offerta.strftime('%Y-%m-%d') if o.data_offerta else '-' }}</td>
+        <td class="center">{{ fatt_medio|round(0) }}</td>
+        <td class="center">{{ gm_medio|round(1) }}%</td>
+        <td><a class="btn btn-small" href="{{ url_for('offerta_edit', off_id=o.id) }}">✏️ Modifica</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p>Nessuna offerta trovata nel periodo selezionato.</p>
+{% endif %}
+
+<hr style="margin-top:2em">
+
+<div class="export-bar">
+  <a class="btn" href="{{ url_for('export_offerte_xlsx') }}">⬇️ Esporta Excel</a>
+  <a class="btn" href="{{ url_for('export_offerte_pdf') }}">📄 Esporta PDF</a>
+  <span class="update-time">Ultimo aggiornamento: {{ now().strftime('%Y-%m-%d %H:%M') }}</span>
+</div>
+{% endblock %}

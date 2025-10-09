@@ -1,0 +1,170 @@
+body {
+  font-family: system-ui, sans-serif;
+  margin: 2em;
+  background-color: #fafafa;
+  color: #222;
+}
+
+h2 {
+  color: #e85e00;
+}
+
+a {
+  text-decoration: none;
+  color: #e85e00;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+label {
+  display: block;
+  margin-top: 0.8em;
+}
+
+input, textarea, select, button {
+  width: 100%;
+  max-width: 400px;
+  padding: 0.4em;
+  box-sizing: border-box;
+  font-size: 1em;
+}
+
+button, .btn {
+  background: #e85e00;
+  color: white;
+  border: none;
+  padding: 0.5em 1em;
+  border-radius: 6px;
+  cursor: pointer;
+}
+button:hover, .btn:hover {
+  background: #c34d00;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.8em;
+}
+
+#flash-messages {
+  margin-bottom: 1em;
+}
+
+.flash {
+  padding: 0.6em 1em;
+  border-radius: 6px;
+  margin-bottom: 0.4em;
+}
+
+.flash.success { background-color: #d4edda; color: #155724; }
+.flash.danger { background-color: #f8d7da; color: #721c24; }
+.flash.warning { background-color: #fff3cd; color: #856404; }
+.flash.info { background-color: #d1ecf1; color: #0c5460; }
+
+.cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1em;
+  margin-bottom: 1.5em;
+}
+
+.card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  padding: 1em;
+  flex: 1 1 180px;
+  text-align: center;
+  border-top: 4px solid #e85e00;
+}
+
+.card .num {
+  font-size: 2em;
+  font-weight: bold;
+  color: #e85e00;
+}
+
+.card .label {
+  font-size: 0.9em;
+  color: #555;
+}
+
+ul.list {
+  list-style: none;
+  padding-left: 0;
+}
+ul.list li {
+  padding: 0.4em 0;
+  border-bottom: 1px solid #eee;
+}
+ul.list li a {
+  color: #e85e00;
+  font-weight: 500;
+}
+ul.list small {
+  color: #666;
+  margin-left: 0.5em;
+}
+
+/* Tabelle offerte */
+.offers-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.8em;
+}
+
+.offers-table th, .offers-table td {
+  padding: 12px 16px; /* più spazio leggibile */
+  border-bottom: 1px solid #eee;
+  text-align: left;
+}
+
+.offers-table th {
+  background-color: #fff5ed;
+  color: #e85e00;
+  font-weight: 600;
+  border-top: 2px solid #e85e00;
+}
+
+.offers-table tr:hover {
+  background-color: #f9f9f9;
+}
+
+.stato-attiva {
+  color: #009900;
+  font-weight: 600;
+}
+
+.stato-passata {
+  color: #777;
+}
+
+.btn-small {
+  padding: 0.3em 0.8em;
+  font-size: 0.9em;
+}
+
+.export-bar {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+}
+
+.export-bar .update-time {
+  margin-left: auto;
+  color: #777;
+  font-size: 0.9em;
+}
+
+/* Allineamento e centratura tabelle offerte */
+.offers-table td.center {
+  text-align: center;
+}
+
+.offers-table th:nth-child(6),
+.offers-table th:nth-child(7) {
+  text-align: center;
+}
+

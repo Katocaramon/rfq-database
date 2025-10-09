@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 style="margin-bottom:0.5em">
+  {{ '✏️ Modifica RFQ' if item else '➕ Nuova RFQ' }}
+</h2>
+
+<form method="post" class="rfq-form">
+  <input type="hidden" name="id" value="{{ item.id if item else '' }}">
+
+  <div class="form-grid">
+    <label>Cliente
+      <input name="nome_cliente" value="{{ item.nome_cliente if item else '' }}" required>
+    </label>
+
+    <label>Progetto
+      <input name="nome_progetto" value="{{ item.nome_progetto if item else '' }}" required>
+    </label>
+
+    <label>Data ricezione:
+      <input type="date" name="data_ricezione"
+             value="{{ (item.data_ricezione if item else date.today()).strftime('%Y-%m-%d') }}">
+    </label>
+
+    <label>Due date quotazione:
+      <input type="date" name="due_date_quotazione"
+             value="{{ (item.due_date_quotazione if item and item.due_date_quotazione else date.today()).strftime('%Y-%m-%d') }}">
+    </label>
+
+    <label>Target price (€)
+      <input type="number" name="target_price" step="0.01" min="0"
+             value="{{ item.target_price if item and item.target_price is not none else '' }}"
+             placeholder="facoltativo">
+    </label>
+
+    <!-- ✅ Campo nuovo: selezione stato RFQ -->
+    <label>Stato RFQ
+      <select name="stato" required>
+        <option value="attiva"   {% if not item or item.stato == 'attiva' %}selected{% endif %}>Attiva</option>
+        <option value="inattiva" {% if item and item.stato == 'inattiva' %}selected{% endif %}>Inattiva</option>
+        <option value="vinta"    {% if item and item.stato == 'vinta' %}selected{% endif %}>Vinta</option>
+        <option value="persa"    {% if item and item.stato == 'persa' %}selected{% endif %}>Persa</option>
+      </select>
+    </label>
+  </div>
+
+  <label style="display:block; margin-top:1em;">Descrizione / Note
+    <textarea name="descrizione" rows="4" placeholder="Dettagli progetto, note cliente...">{{ item.descrizione if item else '' }}</textarea>
+  </label>
+
+  <div style="margin-top:1em">
+    <button type="submit" class="btn-primary">💾 Salva</button>
+    <a class="btn" href="{{ url_for('rfq_list') }}">Annulla</a>
+  </div>
+</form>
+
+{% endblock %}

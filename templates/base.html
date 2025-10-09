@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>RFQ & Offerte Manager</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+
+<header style="margin-bottom:1.5em; border-bottom:2px solid #e85e00; padding-bottom:0.5em;">
+  <h1 style="color:#e85e00; margin:0;">RFQ & Offerte Manager</h1>
+  <nav style="margin-top:0.5em;">
+    <a href="{{ url_for('dashboard') }}">🏠 Dashboard</a> |
+    <a href="{{ url_for('rfq_list') }}">📄 RFQ</a> |
+    <a href="{{ url_for('offerte_list') }}">💼 Offerte</a> |
+    <a href="{{ url_for('export_offerte_xlsx') }}">⬇️ Export Excel</a> |
+    <a href="{{ url_for('auth.logout') }}">🚪 Logout</a>
+  </nav>
+</header>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div id="flash-messages">
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+<main>
+  {% block content %}{% endblock %}
+</main>
+
+<footer style="margin-top:2em; border-top:1px solid #ddd; padding-top:1em; font-size:0.9em; color:#666;">
+  <p>YAGEO Film Capacitor Division — Internal RFQ Database | &copy; {{ now().year }}</p>
+</footer>
+
+</body>
+</html>

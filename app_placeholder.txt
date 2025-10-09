@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -e
+
+APP_DIR="rfq_offerte_app"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+
+echo ">> Creazione struttura progetto in $APP_DIR"
+mkdir -p "$APP_DIR"/{templates,static/uploads,static/css}
+cd "$APP_DIR"
+
+echo ">> Creazione virtualenv"
+$PYTHON_BIN -m venv .venv
+source .venv/bin/activate
+
+echo ">> Requirements"
+cat > requirements.txt << 'EOF'
+Flask==3.0.3
+SQLAlchemy==2.0.35
+Flask-Login==0.6.3
+Flask-WTF==1.2.1
+email-validator==2.2.0
+WTForms==3.1.2
+python-dotenv==1.0.1
+pandas==2.2.2
+openpyxl==3.1.5
+xhtml2pdf==0.2.16

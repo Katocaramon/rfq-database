@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 style="margin-bottom:0.4em;">{{ rfq.nome_cliente }} — {{ rfq.nome_progetto }}</h2>
+
+<!-- Stato RFQ + cambio rapido -->
+<div style="margin-bottom:0.8em;">
+  <form method="post" action="{{ url_for('rfq_set_state', rfq_id=rfq.id) }}" style="display:inline;">
+    <label><strong>🟢 Stato RFQ:</strong></label>
+    <select name="stato" onchange="this.form.submit()" style="padding:4px 8px; margin-left:0.4em;">
+      {% for s in ['attiva','inattiva','vinta','persa'] %}
+        <option value="{{ s }}" {% if rfq.stato == s %}selected{% endif %}>{{ s|capitalize }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+
+<p style="color:#555;">
+  📅 Ricezione: {{ rfq.data_ricezione.strftime('%Y-%m-%d') if rfq.data_ricezione else '' }} |
+  ⏰ Due: {{ rfq.due_date_quotazione.strftime('%Y-%m-%d') if rfq.due_date_quotazione else '' }} |
+  🎯 Target: {{ '%.2f'|format(rfq.target_price) if rfq.target_price is not none else '-' }}
+</p>
+
+<p>{{ rfq.descrizione or '' }}</p>
+
+<hr>
+
+<!-- 📎 Documenti RFQ -->
+<h3>📎 Documenti RFQ</h3>
+<form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" style="margin-bottom:1em;">
+  <input type="hidden" name="rfq_id" value="{{ rfq.id }}">
+  <input type="file" name="file" required>
+  <button class="btn">📤 Upload</button>
+</form>
+
+{% if docs and docs|length > 0 %}
+  <ul>
+    {% for d in docs %}
+      {% if d.filename.lower().endswith('.xlsx') and 'payback' in d.filename.lower() %}
+        <li>
+          <a href="#" onclick="askViewOrDownload('{{ d.filename }}'); return false;">📊 {{ d.filename }}</a>
+        </li>
+      {% else %}
+        <li><a href="{{ url_for('files', filename=d.filename) }}">{{ d.filename }}</a></li>
+      {% endif %}
+    {% endfor %}
+  </ul>
+{% else %}
+  <p><em>Nessun documento caricato.</em></p>
+{% endif %}
+
+<!-- 🔐 Eliminazione RFQ -->
+<div style="margin-top:1em; padding:0.8em; background:#fff3f0; border:1px solid #f1b0b7; border-radius:6px;">
+  <h4 style="margin:0 0 0.5em 0; color:#c0392b;">⚠️ Eliminazione RFQ</h4>
+  <form id="deleteRFQForm" action="{{ url_for('rfq_delete', rfq_id=rfq.id) }}" method="post">
+    <input type="hidden" name="auth_code" id="rfqAuthCode">
+    <button type="button" class="btn" style="background:#e74c3c;color:white;" onclick="askAuthCodeRFQ()">🗑️ Elimina RFQ</button>
+  </form>
+</div>
+
+<hr style="margin:2em 0 1em 0;">
+
+<!-- 📊 Offerte -->
+<h3>📊 Offerte & Revisioni</h3>
+<div style="display:flex; gap:0.8em; margin-bottom:1em;">
+  <a class="btn" href="{{ url_for('offerta_new', rfq_id=rfq.id) }}">➕ Nuova Offerta</a>
+  {% if offerte and offerte|length > 0 %}
+    <form action="{{ url_for('offerta_clone_rev', off_id=offerte[0].id) }}" method="post">
+      <button class="btn">📄 Clona ultima revisione</button>
+    </form>
+  {% endif %}
+</div>
+
+{% if offerte and offerte|length > 0 %}
+  {% set fatt_list = [] %}
+  {% set gm_list = [] %}
+
+  {% for o in offerte %}
+  {% set fatt_annuo = ((o.prezzo_sop or 0)*(o.vol_sop or 0)
+                     + (o.prezzo_sop1 or 0)*(o.vol_sop1 or 0)
+                     + (o.prezzo_sop2 or 0)*(o.vol_sop2 or 0)
+                     + (o.prezzo_sop3 or 0)*(o.vol_sop3 or 0)
+                     + (o.prezzo_sop4 or 0)*(o.vol_sop4 or 0)) / 1000 %}
+  {% set gm_medio = ((o.gm_sop or 0) + (o.gm_sop1 or 0) + (o.gm_sop2 or 0) + (o.gm_sop3 or 0) + (o.gm_sop4 or 0)) / 5 %}
+  {% set _ = fatt_list.append(fatt_annuo) %}
+  {% set _ = gm_list.append(gm_medio) %}
+
+  <div style="margin-bottom:2em; padding:1em; border:1px solid #eee; border-radius:8px;">
+    <h4 style="margin-bottom:0.4em;">🔁 Revisione {{ o.id_offerta_rev }} — {{ o.versione or '-' }}</h4>
+    <p style="margin-top:0; color:#666;">📆 Data: {{ o.data_offerta.strftime('%Y-%m-%d') if o.data_offerta else '' }} | Stato: <strong>{{ o.stato }}</strong></p>
+
+    <!-- Matrice Dati -->
+    <table class="thin" style="width:100%; border-collapse:collapse; text-align:center; margin-top:0.5em;">
+      <thead style="background:#f9f9f9;">
+        <tr>
+          <th style="width:14%;">Parametro</th>
+          <th>SOP</th>
+          <th>SOP+1</th>
+          <th>SOP+2</th>
+          <th>SOP+3</th>
+          <th>SOP+4</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><b>Prezzo (€)</b></td>
+          <td>{{ o.prezzo_sop or 0 }}</td><td>{{ o.prezzo_sop1 or 0 }}</td><td>{{ o.prezzo_sop2 or 0 }}</td><td>{{ o.prezzo_sop3 or 0 }}</td><td>{{ o.prezzo_sop4 or 0 }}</td>
+        </tr>
+        <tr><td><b>Volumi (Kpcs)</b></td>
+          <td>{{ ((o.vol_sop or 0)/1000)|int }}</td><td>{{ ((o.vol_sop1 or 0)/1000)|int }}</td><td>{{ ((o.vol_sop2 or 0)/1000)|int }}</td><td>{{ ((o.vol_sop3 or 0)/1000)|int }}</td><td>{{ ((o.vol_sop4 or 0)/1000)|int }}</td>
+        </tr>
+        <tr><td><b>GM%</b></td>
+          <td>{{ o.gm_sop or 0 }}%</td><td>{{ o.gm_sop1 or 0 }}%</td><td>{{ o.gm_sop2 or 0 }}%</td><td>{{ o.gm_sop3 or 0 }}%</td><td>{{ o.gm_sop4 or 0 }}%</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Pulsanti Offerta -->
+    <div style="margin-top:0.8em; display:flex; gap:0.8em;">
+      <a href="{{ url_for('offerta_edit', off_id=o.id) }}" class="btn">✏️ Modifica</a>
+      <form id="deleteOffertaForm{{ o.id }}" action="{{ url_for('offerta_delete', off_id=o.id) }}" method="post" style="display:inline;">
+        <input type="hidden" name="auth_code" id="authCodeOff{{ o.id }}">
+        <button type="button" class="btn" style="background:#c0392b;color:white;" onclick="askAuthCodeOfferta({{ o.id }})">🗑️ Elimina</button>
+      </form>
+    </div>
+<!-- 📎 Allegati Offerta -->
+{% set allegati = o.documents if o.documents is defined else [] %}
+<div style="margin-top:1em; padding:0.8em; background:#f8f8f8; border-radius:6px;">
+  <h5 style="margin:0 0 0.4em 0;">📎 Allegati Offerta</h5>
+
+  {% if allegati and allegati|length > 0 %}
+    <ul style="margin:0; padding-left:1.2em;">
+      {% for doc in allegati %}
+        {% set fname = doc.filename %}
+        {% set lower = fname|lower %}
+        <li>
+          {% if lower.endswith('.xlsx') or lower.endswith('.xlsm') or lower.endswith('.xls') %}
+            {% if 'payback' in lower %}
+              👁️ <a href="{{ url_for('view_excel_styled', filename=fname) }}" target="_blank">Visualizza Payback</a>
+              &nbsp;|&nbsp;
+              ⬇️ <a href="{{ url_for('files', filename=fname) }}">Scarica</a>
+              &nbsp;<span style="color:#777">{{ fname }}</span>
+            {% else %}
+              ⬇️ <a href="{{ url_for('files', filename=fname) }}">{{ fname }}</a>
+            {% endif %}
+          {% else %}
+            ⬇️ <a href="{{ url_for('files', filename=fname) }}">{{ fname }}</a>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p style="color:#777; margin:0;">Nessun file allegato per questa offerta.</p>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" style="margin-top:0.6em;">
+    <input type="hidden" name="offerta_id" value="{{ o.id }}">
+    <input type="file" name="file" required>
+    <button class="btn">📤 Aggiungi Allegato</button>
+  </form>
+</div>
+{% endfor %}
+
+  <!-- 📈 Riepilogo -->
+  {% set fatturato_totale = fatt_list | sum %}
+  {% set gm_medio_tot = (gm_list | sum / (gm_list|length)) if gm_list|length > 0 else 0 %}
+  <div style="margin-top:1.5em; padding:1em; background:#fafafa; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <h4>📈 Riepilogo Totale</h4>
+    <p><strong>Totale fatturato medio annuo:</strong> {{ fatturato_totale|int }} K$</p>
+    <p><strong>GM% medio complessivo:</strong> {{ gm_medio_tot|round(1) }}%</p>
+  </div>
+
+{% else %}
+  <p><em>Nessuna offerta presente per questa RFQ.</em></p>
+{% endif %}
+
+<hr>
+<a href="{{ url_for('rfq_list') }}" style="color:#d35400;">← Torna all'elenco RFQ</a>
+
+<!-- 🔒 Script Popup Codice Autorizzativo + Viewer Excel -->
+<script>
+function askAuthCodeRFQ() {
+  const code = prompt("🔐 Inserisci il codice autorizzativo per eliminare la RFQ:");
+  if (code && code.trim() !== "") {
+    document.getElementById("rfqAuthCode").value = code.trim();
+    document.getElementById("deleteRFQForm").submit();
+  } else {
+    alert("Operazione annullata: codice mancante.");
+  }
+}
+
+function askAuthCodeOfferta(offertaId) {
+  const code = prompt("🔐 Inserisci il codice autorizzativo per eliminare l’offerta:");
+  if (code && code.trim() !== "") {
+    document.getElementById("authCodeOff" + offertaId).value = code.trim();
+    document.getElementById("deleteOffertaForm" + offertaId).submit();
+  } else {
+    alert("Operazione annullata: codice mancante.");
+  }
+}
+
+function askViewOrDownload(filename) {
+  const choice = confirm("Vuoi visualizzare il file (OK) o scaricarlo (Annulla)?");
+  if (choice) {
+    window.location.href = "/view_excel/" + encodeURIComponent(filename);
+  } else {
+    window.location.href = "/files/" + encodeURIComponent(filename);
+  }
+}
+</script>
+
+{% endblock %}

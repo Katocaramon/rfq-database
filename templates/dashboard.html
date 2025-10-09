@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>📊 Dashboard</h2>
+
+<!-- Totali RFQ -->
+<div style="display:flex; gap:1em; flex-wrap:wrap; margin-bottom:1em;">
+  <div class="card">📬 Totali RFQ: <strong>{{ total_rfq }}</strong></div>
+  <div class="card">💼 Totali Offerte: <strong>{{ total_offerte }}</strong></div>
+</div>
+
+<!-- Stato RFQ -->
+<h3>📋 Stato RFQ</h3>
+<div style="display:flex; gap:1em; flex-wrap:wrap; margin-bottom:1.5em;">
+  <div class="card" style="background:#e8f8f5;">🟢 Attive: <strong>{{ rfq_status_counts.attiva }}</strong></div>
+  <div class="card" style="background:#fef9e7;">🟡 Inattive: <strong>{{ rfq_status_counts.inattiva }}</strong></div>
+  <div class="card" style="background:#e8f6f3;">🏆 Vinte: <strong>{{ rfq_status_counts.vinta }}</strong></div>
+  <div class="card" style="background:#fdecea;">❌ Perse: <strong>{{ rfq_status_counts.persa }}</strong></div>
+</div>
+
+<!-- 📉 Grafico compatto -->
+<div style="display:flex; justify-content:center; margin-bottom:1.5em;">
+  <div style="width:220px; height:220px;">
+    <canvas id="rfqChart"></canvas>
+  </div>
+</div>
+
+<hr>
+
+<!-- RFQ Recenti -->
+<h3>📥 RFQ Recenti</h3>
+<table class="thin" style="width:100%; border-collapse:collapse;">
+  <thead><tr><th>Cliente</th><th>Progetto</th><th>Stato</th><th>Ricezione</th></tr></thead>
+  <tbody>
+    {% for r in recent_rfq %}
+      <tr>
+        <td>{{ r.nome_cliente }}</td>
+        <td>{{ r.nome_progetto }}</td>
+        <td>{{ r.stato }}</td>
+        <td>{{ r.data_ricezione.strftime('%Y-%m-%d') if r.data_ricezione else '' }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4"><em>Nessuna RFQ recente.</em></td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<hr>
+
+<!-- Offerte Recenti -->
+<h3>🧾 Offerte Recenti</h3>
+<table class="thin" style="width:100%; border-collapse:collapse;">
+  <thead><tr><th>Cliente</th><th>Progetto</th><th>Versione</th><th>Data</th></tr></thead>
+  <tbody>
+    {% for o in recent_off %}
+      <tr>
+        <td>{{ o.rfq.nome_cliente }}</td>
+        <td>{{ o.rfq.nome_progetto }}</td>
+        <td>{{ o.versione }}</td>
+        <td>{{ o.data_offerta.strftime('%Y-%m-%d') if o.data_offerta else '' }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4"><em>Nessuna offerta recente.</em></td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- Script Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const ctx = document.getElementById('rfqChart').getContext('2d');
+new Chart(ctx, {
+  type: 'doughnut',
+  data: {
+    labels: ['Attive', 'Inattive', 'Vinte', 'Perse'],
+    datasets: [{
+      data: [
+        {{ rfq_status_counts.attiva }},
+        {{ rfq_status_counts.inattiva }},
+        {{ rfq_status_counts.vinta }},
+        {{ rfq_status_counts.persa }}
+      ],
+      backgroundColor: ['#2ecc71', '#f1c40f', '#3498db', '#e74c3c'],
+      borderWidth: 1
+    }]
+  },
+  options: {
+    plugins: { legend: { position: 'bottom' } },
+    responsive: true,
+    maintainAspectRatio: false
+  }
+});
+</script>
+
+{% endblock %}

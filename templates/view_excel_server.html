@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>📊 Payback Viewer (Server)</h2>
+<p><strong>File:</strong> {{ filename }}</p>
+<p><strong>Scheda letta:</strong> {{ sheet_name }}</p>
+
+<div style="overflow:auto; max-height:80vh; border:1px solid #ccc; border-radius:6px; background:white; padding:10px;">
+  {{ table_html|safe }}
+</div>
+
+<hr>
+<div style="margin-top:1em;">
+  <a href="{{ url_for('files', filename=filename) }}" class="btn">⬇️ Scarica originale</a>
+  <a href="{{ request.referrer or url_for('dashboard') }}" class="btn">⬅️ Torna</a>
+</div>
+
+{% endblock %}

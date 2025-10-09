@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>RFQ</h2>
+<form method="get" class="row">
+  <input name="q" value="{{ q }}" placeholder="Cerca cliente o progetto">
+  <button type="submit">Cerca</button>
+  <a class="btn" href="{{ url_for('rfq_new') }}">+ Nuova RFQ</a>
+</form>
+<table>
+  <tr><th>Cliente</th><th>Progetto</th><th>Ricezione</th><th>Due Date</th><th>Target</th><th></th></tr>
+  {% for r in rfqs %}
+  <tr>
+    <td>{{ r.nome_cliente }}</td>
+    <td><a href="{{ url_for('rfq_detail', rfq_id=r.id) }}">{{ r.nome_progetto }}</a></td>
+    <td>{{ r.data_ricezione }}</td>
+    <td>{{ r.due_date_quotazione }}</td>
+    <td>{{ r.target_price or '' }}</td>
+    <td>
+      <a href="{{ url_for('rfq_edit', rfq_id=r.id) }}">Modifica</a>
+      <form action="{{ url_for('rfq_delete', rfq_id=r.id) }}" method="post" style="display:inline" onsubmit="return confirm('Eliminare?')"><button>Elimina</button></form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

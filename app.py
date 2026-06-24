@@ -1,4 +1,6 @@
 import os
+import secrets
+import logging
 from datetime import date, datetime
 from io import BytesIO
 
@@ -15,11 +17,17 @@ import html
 from sqlalchemy import select, or_, func
 from sqlalchemy.orm import selectinload
 from werkzeug.security import generate_password_hash
+from werkzeug.utils import secure_filename
 
 from auth import auth_bp, login_manager
 from db import Base, engine, SessionLocal
 from models import RFQ, Offerta, Document, User
 from utils import export_offerte_excel, render_pdf_from_html
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
 
 
 # ----------------------------
@@ -49,12 +57,23 @@ def parse_date_nullable(val: str | None):
 # Flask App setup
 # ----------------------------
 app = Flask(__name__)
+
+_secret_key = os.getenv("SECRET_KEY", "dev-key")
+if _secret_key == "dev-key":
+    logging.warning(
+        "SECRET_KEY non impostata — uso il valore di default non sicuro. "
+        "Imposta SECRET_KEY nel file .env prima di andare in produzione."
+    )
+
 app.config.from_mapping(
-    SECRET_KEY=os.getenv("SECRET_KEY", "dev-key"),
-    UPLOAD_FOLDER=os.getenv("UPLOAD_FOLDER", "static/uploads"),
+    SECRET_KEY=_secret_key,
+    # Upload fuori da static/ per evitare accesso diretto senza autenticazione
+    UPLOAD_FOLDER=os.getenv(
+        "UPLOAD_FOLDER",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads"),
+    ),
+    DELETE_AUTH_CODE=os.getenv("DELETE_AUTH_CODE", "DEL2025"),
 )
-# ✅ Codice autorizzativo (puoi anche impostare DELETE_AUTH_CODE in .env)
-app.config["DELETE_AUTH_CODE"] = os.getenv("DELETE_AUTH_CODE", "DEL2025")
 
 login_manager.init_app(app)
 app.register_blueprint(auth_bp, url_prefix="")
@@ -65,7 +84,16 @@ app.register_blueprint(auth_bp, url_prefix="")
 Base.metadata.create_all(engine)
 with SessionLocal() as db:
     if not db.execute(select(User).where(User.username == "admin")).scalar_one_or_none():
-        db.add(User(username="admin", password_hash=generate_password_hash("admin")))
+        admin_pwd = os.getenv("ADMIN_PASSWORD")
+        if not admin_pwd:
+            admin_pwd = secrets.token_urlsafe(16)
+            print("\n" + "=" * 60)
+            print("PRIMO AVVIO — credenziali admin generate automaticamente:")
+            print(f"  Username : admin")
+            print(f"  Password : {admin_pwd}")
+            print("Cambia la password subito da Impostazioni > Cambia password!")
+            print("=" * 60 + "\n")
+        db.add(User(username="admin", password_hash=generate_password_hash(admin_pwd)))
         db.commit()
 
 
@@ -518,15 +546,19 @@ def upload():
         flash("Nessun file selezionato", "warning")
         return redirect(request.referrer or url_for("dashboard"))
 
+    safe_name = secure_filename(file.filename)
+    if not safe_name:
+        flash("Nome file non valido", "warning")
+        return redirect(request.referrer or url_for("dashboard"))
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
-    save_path = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
+    save_path = os.path.join(app.config["UPLOAD_FOLDER"], safe_name)
     file.save(save_path)
 
     with SessionLocal() as db:
         d = Document(
             rfq_id=int(rfq_id) if rfq_id else None,
             offerta_id=int(offerta_id) if offerta_id else None,
-            filename=file.filename,
+            filename=safe_name,
             path=save_path,
         )
         db.add(d)
@@ -615,14 +647,6 @@ def view_excel_server(filename):
             sheet_name=sheet_name,            # <- visibile nella pagina
             table_html=Markup(table_html)
         )
-    except Exception as e:
-        flash(f"Errore nella lettura del file Excel: {e}", "danger")
-        return redirect(request.referrer or url_for("dashboard"))
-
-    except Exception as e:
-        flash(f"Errore nella lettura del file Excel: {e}", "danger")
-        return redirect(request.referrer or url_for("dashboard"))
-
     except Exception as e:
         flash(f"Errore nella lettura del file Excel: {e}", "danger")
         return redirect(request.referrer or url_for("dashboard"))
@@ -838,7 +862,7 @@ def inject_date():
 
 
 # ----------------------------
-# Run
+# Run (solo per sviluppo locale — in produzione usa run.py con Waitress)
 # ----------------------------
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=False, host="127.0.0.1", port=8080)

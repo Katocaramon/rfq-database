@@ -72,12 +72,12 @@ class Offerta(Base):
     vol_sop3: Mapped[int | None] = mapped_column(Integer, nullable=True)
     vol_sop4: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    # Fatturati (colonne generate)
-    fatt_sop = Column(Float, Computed("(IFNULL(prezzo_sop,0.0)*IFNULL(vol_sop,0))"))
-    fatt_sop1 = Column(Float, Computed("(IFNULL(prezzo_sop1,0.0)*IFNULL(vol_sop1,0))"))
-    fatt_sop2 = Column(Float, Computed("(IFNULL(prezzo_sop2,0.0)*IFNULL(vol_sop2,0))"))
-    fatt_sop3 = Column(Float, Computed("(IFNULL(prezzo_sop3,0.0)*IFNULL(vol_sop3,0))"))
-    fatt_sop4 = Column(Float, Computed("(IFNULL(prezzo_sop4,0.0)*IFNULL(vol_sop4,0))"))
+    # Fatturati (colonne generate — COALESCE è standard SQL, compatibile con SQLite e PostgreSQL)
+    fatt_sop  = Column(Float, Computed("COALESCE(prezzo_sop,  0.0) * COALESCE(vol_sop,  0)", persisted=True))
+    fatt_sop1 = Column(Float, Computed("COALESCE(prezzo_sop1, 0.0) * COALESCE(vol_sop1, 0)", persisted=True))
+    fatt_sop2 = Column(Float, Computed("COALESCE(prezzo_sop2, 0.0) * COALESCE(vol_sop2, 0)", persisted=True))
+    fatt_sop3 = Column(Float, Computed("COALESCE(prezzo_sop3, 0.0) * COALESCE(vol_sop3, 0)", persisted=True))
+    fatt_sop4 = Column(Float, Computed("COALESCE(prezzo_sop4, 0.0) * COALESCE(vol_sop4, 0)", persisted=True))
 
     __table_args__ = (
         UniqueConstraint("rfq_id", "id_offerta_rev", name="uq_offerta_rfq_rev"),

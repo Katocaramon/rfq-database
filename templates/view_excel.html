@@ -21,7 +21,7 @@
 <script>
 function renderPayback() {
   const filename = "{{ filename }}";
-  const fileUrl = `/static/uploads/${encodeURIComponent(filename)}`;
+  const fileUrl = `/files/${encodeURIComponent(filename)}`;
   const container = document.getElementById("viewer-container");
 
   fetch(fileUrl)

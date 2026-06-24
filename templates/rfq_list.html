@@ -1,25 +1,98 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>RFQ</h2>
-<form method="get" class="row">
-  <input name="q" value="{{ q }}" placeholder="Cerca cliente o progetto">
-  <button type="submit">Cerca</button>
-  <a class="btn" href="{{ url_for('rfq_new') }}">+ Nuova RFQ</a>
+<h2>📄 RFQ</h2>
+
+<!-- Filtri -->
+<form method="get" style="display:flex; flex-wrap:wrap; gap:0.6em; align-items:flex-end; margin-bottom:1em;">
+  <label style="margin:0;">Cerca<br>
+    <input name="q" value="{{ q }}" placeholder="cliente o progetto" style="max-width:220px;">
+  </label>
+  <label style="margin:0;">Anno ricezione<br>
+    <input name="anno" type="number" value="{{ anno }}" placeholder="es. 2026" min="2020" max="2040" style="max-width:100px;">
+  </label>
+  <label style="margin:0; display:flex; align-items:center; gap:0.4em; padding-bottom:0.1em;">
+    <input type="checkbox" name="mostra_obsolete" value="1" {% if mostra_obsolete %}checked{% endif %}>
+    Mostra obsolete
+  </label>
+  <button type="submit">🔍 Filtra</button>
+  <a class="btn" href="{{ url_for('rfq_new') }}" style="background:#2ecc71;">+ Nuova RFQ</a>
+  {% if anno or q or mostra_obsolete %}
+    <a class="btn" href="{{ url_for('rfq_list') }}" style="background:#888;">✕ Reset</a>
+  {% endif %}
 </form>
+
+<!-- Pannello statistiche anno -->
+{% if anno_stats %}
+<div style="background:#fff; border:1px solid #e85e00; border-radius:8px; padding:1em; margin-bottom:1.2em;">
+  <strong style="color:#e85e00;">📅 Anno {{ anno_stats.anno }} — riepilogo</strong>
+  <div style="display:flex; gap:1.5em; flex-wrap:wrap; margin-top:0.6em;">
+    <div>📬 RFQ ricevute: <strong>{{ anno_stats.total_rfq }}</strong></div>
+    <div>💼 Offerte: <strong>{{ anno_stats.total_offerte }}</strong></div>
+    <div style="border-left:1px solid #eee; padding-left:1.5em; display:flex; gap:1em; flex-wrap:wrap;">
+      {% for stato, cnt in anno_stats.by_stato.items() %}
+        <span>{{ stato|replace('_',' ')|capitalize }}: <strong>{{ cnt }}</strong></span>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Tabella RFQ -->
 <table>
-  <tr><th>Cliente</th><th>Progetto</th><th>Ricezione</th><th>Due Date</th><th>Target</th><th></th></tr>
-  {% for r in rfqs %}
-  <tr>
-    <td>{{ r.nome_cliente }}</td>
-    <td><a href="{{ url_for('rfq_detail', rfq_id=r.id) }}">{{ r.nome_progetto }}</a></td>
-    <td>{{ r.data_ricezione }}</td>
-    <td>{{ r.due_date_quotazione }}</td>
-    <td>{{ r.target_price or '' }}</td>
-    <td>
-      <a href="{{ url_for('rfq_edit', rfq_id=r.id) }}">Modifica</a>
-      <form action="{{ url_for('rfq_delete', rfq_id=r.id) }}" method="post" style="display:inline" onsubmit="return confirm('Eliminare?')"><button>Elimina</button></form>
-    </td>
-  </tr>
-  {% endfor %}
+  <thead>
+    <tr>
+      <th>Cliente</th>
+      <th>Progetto</th>
+      <th>Rev.</th>
+      <th>Anno SOP</th>
+      <th>Ricezione</th>
+      <th>Due Date</th>
+      <th>Target €</th>
+      <th>Stato</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rfqs %}
+    <tr {% if r.stato == 'obsoleta' %}style="opacity:0.45; background:#f8f8f8;"{% endif %}>
+      <td>{{ r.nome_cliente }}</td>
+      <td>
+        <a href="{{ url_for('rfq_detail', rfq_id=r.id) }}">{{ r.nome_progetto }}</a>
+        {% if r.stato == 'obsoleta' %}<span style="font-size:0.75em; color:#aaa;"> [obsoleta]</span>{% endif %}
+      </td>
+      <td style="text-align:center; color:#888; font-size:0.85em;">
+        {% if r.numero_revisione > 1 %}
+          <span style="background:#fff3cd; color:#856404; padding:2px 6px; border-radius:10px; font-size:0.8em;">Rev.{{ r.numero_revisione }}</span>
+        {% else %}
+          Rev.1
+        {% endif %}
+      </td>
+      <td style="text-align:center;">{{ r.anno_sop or '—' }}</td>
+      <td>{{ r.data_ricezione }}</td>
+      <td>{{ r.due_date_quotazione }}</td>
+      <td>{{ '%.3f'|format(r.target_price) if r.target_price else '—' }}</td>
+      <td>
+        {% set badge_map = {
+          'attiva':'#e8f8f0;color:#1a7a4a',
+          'vinta':'#e3f0fd;color:#1a5fb4',
+          'persa':'#fdecea;color:#b91c1c',
+          'inattiva':'#f3f3f3;color:#666',
+          'non_gestita':'#fff3cd;color:#856404',
+          'obsoleta':'#eee;color:#aaa'
+        } %}
+        {% set style = badge_map.get(r.stato, '#eee;color:#333') %}
+        <span style="background:{{ style.split(';')[0] }}; {{ style.split(';')[1] if ';' in style else '' }}; padding:2px 8px; border-radius:12px; font-size:0.8em; font-weight:600;">
+          {{ r.stato|replace('_',' ')|capitalize }}
+          {% if r.stato == 'non_gestita' and r.motivo_non_gestione %}
+            <br><small style="font-weight:normal;">{{ r.motivo_non_gestione }}</small>
+          {% endif %}
+        </span>
+      </td>
+      <td><a href="{{ url_for('rfq_edit', rfq_id=r.id) }}" style="font-size:0.9em;">✏️ Modifica</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9"><em>Nessuna RFQ trovata.</em></td></tr>
+    {% endfor %}
+  </tbody>
 </table>
 {% endblock %}

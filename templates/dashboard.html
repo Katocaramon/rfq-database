@@ -1,54 +1,167 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h2>📊 Dashboard</h2>
-
-<!-- Totali RFQ -->
-<div style="display:flex; gap:1em; flex-wrap:wrap; margin-bottom:1em;">
-  <div class="card">📬 Totali RFQ: <strong>{{ total_rfq }}</strong></div>
-  <div class="card">💼 Totali Offerte: <strong>{{ total_offerte }}</strong></div>
+<div style="display:flex; align-items:center; gap:1.2em; flex-wrap:wrap; margin-bottom:1em;">
+  <h2 style="margin:0;">📊 Dashboard</h2>
+  <!-- Filtro anno -->
+  <form method="get" style="display:flex; align-items:center; gap:.5em;">
+    <label style="margin:0; font-weight:500; font-size:.93em;">Anno:</label>
+    <input type="number" name="anno" value="{{ anno }}" min="2020" max="2040"
+           placeholder="tutti" style="width:90px; padding:.3em .5em;">
+    <button type="submit" style="padding:.3em .8em;">🔍</button>
+    {% if anno %}
+      <a href="{{ url_for('dashboard') }}"
+         style="padding:.3em .8em; background:#888; color:#fff; border-radius:6px; font-size:.88em;">✕ Reset</a>
+    {% endif %}
+  </form>
+  {% if anno %}
+    <span style="background:#fff3cd; color:#856404; padding:.3em .9em; border-radius:20px; font-size:.88em; font-weight:600;">
+      📅 Anno {{ anno }}
+    </span>
+  {% endif %}
 </div>
 
-<!-- Stato RFQ -->
-<h3>📋 Stato RFQ</h3>
-<div style="display:flex; gap:1em; flex-wrap:wrap; margin-bottom:1.5em;">
-  <div class="card" style="background:#e8f8f5;">🟢 Attive: <strong>{{ rfq_status_counts.attiva }}</strong></div>
-  <div class="card" style="background:#fef9e7;">🟡 Inattive: <strong>{{ rfq_status_counts.inattiva }}</strong></div>
-  <div class="card" style="background:#e8f6f3;">🏆 Vinte: <strong>{{ rfq_status_counts.vinta }}</strong></div>
-  <div class="card" style="background:#fdecea;">❌ Perse: <strong>{{ rfq_status_counts.persa }}</strong></div>
+<!-- KPI principali -->
+<div style="display:flex; gap:1em; flex-wrap:wrap; margin-bottom:1.2em;">
+  <div class="card">
+    <div class="num">{{ total_rfq_ricevute }}</div>
+    <div class="label">📬 RFQ ricevute{% if anno %} ({{ anno }}){% endif %}</div>
+  </div>
+  <div class="card" style="border-color:#2ecc71;">
+    <div class="num" style="color:#2ecc71;">{{ total_rfq_attive }}</div>
+    <div class="label">🟢 RFQ attive{% if anno %} ({{ anno }}){% endif %}</div>
+  </div>
+  <div class="card" style="border-color:#3498db;">
+    <div class="num" style="color:#3498db;">{{ total_offerte }}</div>
+    <div class="label">💼 Offerte{% if anno %} ({{ anno }}){% endif %}</div>
+  </div>
 </div>
 
-<!-- 📉 Grafico compatto -->
-<div style="display:flex; justify-content:center; margin-bottom:1.5em;">
-  <div style="width:220px; height:220px;">
+<!-- Breakdown stato -->
+<h3 style="margin-bottom:.6em;">📋 Stato RFQ{% if anno %} — {{ anno }}{% endif %}</h3>
+<div style="display:flex; gap:.8em; flex-wrap:wrap; margin-bottom:1.4em;">
+  <div class="card" style="background:#e8f8f5; border-color:#2ecc71;">
+    <div class="num" style="color:#2ecc71;">{{ rfq_status_counts.attiva }}</div>
+    <div class="label">🟢 Attive</div>
+  </div>
+  <div class="card" style="background:#fef9e7; border-color:#f1c40f;">
+    <div class="num" style="color:#c9a100;">{{ rfq_status_counts.inattiva }}</div>
+    <div class="label">🟡 Inattive</div>
+  </div>
+  <div class="card" style="background:#e3f0fd; border-color:#1a73e8;">
+    <div class="num" style="color:#1a73e8;">{{ rfq_status_counts.vinta }}</div>
+    <div class="label">🏆 Vinte</div>
+  </div>
+  <div class="card" style="background:#fdecea; border-color:#e74c3c;">
+    <div class="num" style="color:#c0392b;">{{ rfq_status_counts.persa }}</div>
+    <div class="label">❌ Perse</div>
+  </div>
+  <div class="card" style="background:#fff3cd; border-color:#f39c12;">
+    <div class="num" style="color:#856404;">{{ rfq_status_counts.non_gestita }}</div>
+    <div class="label">⏸️ Non gestite</div>
+  </div>
+  <div class="card" style="background:#f3f3f3; border-color:#aaa;">
+    <div class="num" style="color:#aaa;">{{ rfq_status_counts.obsoleta }}</div>
+    <div class="label">🗂 Obsolete</div>
+  </div>
+</div>
+
+<!-- Grafico doughnut -->
+<div style="display:flex; justify-content:center; margin-bottom:1.4em;">
+  <div style="width:210px; height:210px;">
     <canvas id="rfqChart"></canvas>
   </div>
 </div>
 
 <hr>
 
-<!-- RFQ Recenti -->
-<h3>📥 RFQ Recenti</h3>
+<!-- ══ Pipeline Opportunity (sempre globale — basata su Anno SOP) ══ -->
+<h3>🚀 Pipeline Opportunity <small style="font-size:.65em; color:#aaa; font-weight:400;">(globale — per Anno SOP)</small></h3>
+
+{% macro pipeline_table(pipeline, label, color) %}
+<div style="flex:1; min-width:280px;">
+  <h4 style="color:{{ color }}; margin-bottom:.5em;">{{ label }}</h4>
+  {% if pipeline %}
+  <table class="thin" style="width:100%; border-collapse:collapse;">
+    <thead>
+      <tr style="background:#f9f9f9;">
+        <th>Anno SOP</th>
+        <th style="text-align:right;">Revenue K€</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set ns = namespace(total=0) %}
+      {% for anno_sop, keur in pipeline.items() %}
+        {% set ns.total = ns.total + keur %}
+        <tr>
+          <td>{{ anno_sop }}</td>
+          <td style="text-align:right; font-weight:600;">{{ '%.1f'|format(keur) }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr style="border-top:2px solid {{ color }};">
+        <td><strong>Totale</strong></td>
+        <td style="text-align:right; font-weight:700; color:{{ color }};">{{ '%.1f'|format(ns.total) }} K€</td>
+      </tr>
+    </tfoot>
+  </table>
+  <div style="margin-top:.5em; height:80px;">
+    <canvas id="chart_{{ label|replace(' ','_') }}"></canvas>
+  </div>
+  <script>
+  (function() {
+    const ctx = document.getElementById('chart_{{ label|replace(' ','_') }}').getContext('2d');
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: [{% for a in pipeline.keys() %}"{{ a }}"{% if not loop.last %},{% endif %}{% endfor %}],
+        datasets: [{ data: [{% for k in pipeline.values() %}{{ '%.1f'|format(k) }}{% if not loop.last %},{% endif %}{% endfor %}],
+          backgroundColor: '{{ color }}55', borderColor: '{{ color }}', borderWidth: 1 }]
+      },
+      options: { plugins:{legend:{display:false}}, responsive:true, maintainAspectRatio:false,
+        scales:{ y:{beginAtZero:true,ticks:{font:{size:9}}}, x:{ticks:{font:{size:9}}} } }
+    });
+  })();
+  </script>
+  {% else %}
+  <p style="color:#aaa; font-size:.9em;"><em>Nessuna opportunità con Anno SOP impostato.</em></p>
+  {% endif %}
+</div>
+{% endmacro %}
+
+<div style="display:flex; gap:2em; flex-wrap:wrap; margin-bottom:2em;">
+  {{ pipeline_table(pipeline_attive, "Pipeline Attive", "#e85e00") }}
+  {{ pipeline_table(pipeline_vinte,  "Pipeline Vinte",  "#1a73e8") }}
+</div>
+
+<hr>
+
+<!-- RFQ recenti -->
+<h3>📥 RFQ Recenti{% if anno %} — {{ anno }}{% endif %}</h3>
 <table class="thin" style="width:100%; border-collapse:collapse;">
-  <thead><tr><th>Cliente</th><th>Progetto</th><th>Stato</th><th>Ricezione</th></tr></thead>
+  <thead><tr><th>Cliente</th><th>Progetto</th><th>Anno SOP</th><th>Stato</th><th>Ricezione</th></tr></thead>
   <tbody>
     {% for r in recent_rfq %}
       <tr>
         <td>{{ r.nome_cliente }}</td>
-        <td>{{ r.nome_progetto }}</td>
-        <td>{{ r.stato }}</td>
+        <td><a href="{{ url_for('rfq_detail', rfq_id=r.id) }}">{{ r.nome_progetto }}</a>
+          {% if r.numero_revisione > 1 %}<small style="color:#856404;"> Rev.{{ r.numero_revisione }}</small>{% endif %}
+        </td>
+        <td style="text-align:center;">{{ r.anno_sop or '—' }}</td>
+        <td>{{ r.stato|replace('_',' ')|capitalize }}</td>
         <td>{{ r.data_ricezione.strftime('%Y-%m-%d') if r.data_ricezione else '' }}</td>
       </tr>
     {% else %}
-      <tr><td colspan="4"><em>Nessuna RFQ recente.</em></td></tr>
+      <tr><td colspan="5"><em>Nessuna RFQ{% if anno %} per il {{ anno }}{% endif %}.</em></td></tr>
     {% endfor %}
   </tbody>
 </table>
 
 <hr>
 
-<!-- Offerte Recenti -->
-<h3>🧾 Offerte Recenti</h3>
+<!-- Offerte recenti -->
+<h3>🧾 Offerte Recenti{% if anno %} — {{ anno }}{% endif %}</h3>
 <table class="thin" style="width:100%; border-collapse:collapse;">
   <thead><tr><th>Cliente</th><th>Progetto</th><th>Versione</th><th>Data</th></tr></thead>
   <tbody>
@@ -60,34 +173,33 @@
         <td>{{ o.data_offerta.strftime('%Y-%m-%d') if o.data_offerta else '' }}</td>
       </tr>
     {% else %}
-      <tr><td colspan="4"><em>Nessuna offerta recente.</em></td></tr>
+      <tr><td colspan="4"><em>Nessuna offerta{% if anno %} per il {{ anno }}{% endif %}.</em></td></tr>
     {% endfor %}
   </tbody>
 </table>
 
-<!-- Script Chart.js -->
+<!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-const ctx = document.getElementById('rfqChart').getContext('2d');
-new Chart(ctx, {
+new Chart(document.getElementById('rfqChart').getContext('2d'), {
   type: 'doughnut',
   data: {
-    labels: ['Attive', 'Inattive', 'Vinte', 'Perse'],
+    labels: ['Attive','Inattive','Vinte','Perse','Non gestite'],
     datasets: [{
       data: [
         {{ rfq_status_counts.attiva }},
         {{ rfq_status_counts.inattiva }},
         {{ rfq_status_counts.vinta }},
-        {{ rfq_status_counts.persa }}
+        {{ rfq_status_counts.persa }},
+        {{ rfq_status_counts.non_gestita }}
       ],
-      backgroundColor: ['#2ecc71', '#f1c40f', '#3498db', '#e74c3c'],
-      borderWidth: 1
+      backgroundColor: ['#2ecc71','#f1c40f','#3498db','#e74c3c','#f39c12'],
+      borderWidth: 2, borderColor: '#fff'
     }]
   },
   options: {
-    plugins: { legend: { position: 'bottom' } },
-    responsive: true,
-    maintainAspectRatio: false
+    plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } },
+    responsive: true, maintainAspectRatio: false, cutout: '60%'
   }
 });
 </script>

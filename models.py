@@ -1,6 +1,7 @@
+from datetime import datetime
 from sqlalchemy import (
-    Column, Integer, String, Text, Date, Float, ForeignKey, UniqueConstraint,
-    CheckConstraint, Computed
+    Column, Integer, String, Text, Date, Float, DateTime,
+    ForeignKey, UniqueConstraint, CheckConstraint, Computed
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from db import Base
@@ -23,17 +24,27 @@ class RFQ(Base):
     due_date_quotazione: Mapped[Date] = mapped_column(Date, nullable=False)
     target_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     descrizione: Mapped[str | None] = mapped_column(Text, nullable=True)
+    stato: Mapped[str] = mapped_column(String(15), nullable=False, default="attiva")
 
-    # ✅ Nuovo campo "stato" per tracciare la fase della RFQ
-    stato: Mapped[str] = mapped_column(
-        String(15),
-        nullable=False,
-        default="attiva"
-    )
+    # Revisioni RFQ
+    numero_revisione: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    rfq_padre_id: Mapped[int | None] = mapped_column(ForeignKey("rfq.id"), nullable=True)
+
+    # Anno SOP (anno di avvio produttivo — usato per la pipeline)
+    anno_sop: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Motivo solo per stato = 'non_gestita'
+    motivo_non_gestione: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
+    # Audit
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
     __table_args__ = (
-        UniqueConstraint("nome_cliente", "nome_progetto", name="uq_cliente_progetto"),
-        CheckConstraint("stato in ('attiva', 'inattiva', 'vinta', 'persa')", name="ck_rfq_stato"),
+        UniqueConstraint("nome_cliente", "nome_progetto", "numero_revisione", name="uq_cliente_progetto_rev"),
+        CheckConstraint(
+            "stato in ('attiva','inattiva','vinta','persa','non_gestita','obsoleta')",
+            name="ck_rfq_stato"
+        ),
     )
 
     offerte = relationship("Offerta", back_populates="rfq", cascade="all, delete-orphan")
@@ -50,6 +61,9 @@ class Offerta(Base):
     versione: Mapped[str | None] = mapped_column(String(30), nullable=True)
     stato: Mapped[str] = mapped_column(String(10), nullable=False, default="attiva")
     data_offerta: Mapped[Date] = mapped_column(Date, nullable=False)
+
+    # Audit
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
     # Prezzi
     prezzo_sop: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -72,12 +86,12 @@ class Offerta(Base):
     vol_sop3: Mapped[int | None] = mapped_column(Integer, nullable=True)
     vol_sop4: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    # Fatturati (colonne generate)
-    fatt_sop = Column(Float, Computed("(IFNULL(prezzo_sop,0.0)*IFNULL(vol_sop,0))"))
-    fatt_sop1 = Column(Float, Computed("(IFNULL(prezzo_sop1,0.0)*IFNULL(vol_sop1,0))"))
-    fatt_sop2 = Column(Float, Computed("(IFNULL(prezzo_sop2,0.0)*IFNULL(vol_sop2,0))"))
-    fatt_sop3 = Column(Float, Computed("(IFNULL(prezzo_sop3,0.0)*IFNULL(vol_sop3,0))"))
-    fatt_sop4 = Column(Float, Computed("(IFNULL(prezzo_sop4,0.0)*IFNULL(vol_sop4,0))"))
+    # Fatturati (colonne generate — COALESCE compatibile con SQLite e PostgreSQL)
+    fatt_sop  = Column(Float, Computed("COALESCE(prezzo_sop,  0.0) * COALESCE(vol_sop,  0)", persisted=True))
+    fatt_sop1 = Column(Float, Computed("COALESCE(prezzo_sop1, 0.0) * COALESCE(vol_sop1, 0)", persisted=True))
+    fatt_sop2 = Column(Float, Computed("COALESCE(prezzo_sop2, 0.0) * COALESCE(vol_sop2, 0)", persisted=True))
+    fatt_sop3 = Column(Float, Computed("COALESCE(prezzo_sop3, 0.0) * COALESCE(vol_sop3, 0)", persisted=True))
+    fatt_sop4 = Column(Float, Computed("COALESCE(prezzo_sop4, 0.0) * COALESCE(vol_sop4, 0)", persisted=True))
 
     __table_args__ = (
         UniqueConstraint("rfq_id", "id_offerta_rev", name="uq_offerta_rfq_rev"),

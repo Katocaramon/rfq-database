@@ -177,35 +177,62 @@ def _delete_rfq_offerte_and_docs(db, rfq: RFQ):
 @app.route("/")
 @login_required
 def dashboard():
+    anno_filter = request.args.get("anno", "").strip()
+    anno_int: int | None = None
+    date_start: date | None = None
+    date_end: date | None = None
+    if anno_filter:
+        try:
+            anno_int = int(anno_filter)
+            date_start = date(anno_int, 1, 1)
+            date_end   = date(anno_int, 12, 31)
+        except ValueError:
+            anno_filter = ""
+
     with SessionLocal() as db:
-        # Totali (escluse obsolete e non_gestite)
-        stati_attivi = ("attiva", "inattiva", "vinta", "persa")
-        total_rfq = db.scalar(
-            select(func.count()).select_from(RFQ).where(RFQ.stato.in_(stati_attivi))
-        ) or 0
-        total_offerte = db.scalar(select(func.count()).select_from(Offerta)) or 0
 
-        rfq_status_counts = {
-            s: db.scalar(select(func.count()).where(RFQ.stato == s)) or 0
-            for s in ("attiva", "inattiva", "vinta", "persa", "non_gestita", "obsoleta")
-        }
+        def _rfq_count(*extra):
+            stmt = select(func.count()).select_from(RFQ)
+            if date_start:
+                stmt = stmt.where(RFQ.data_ricezione >= date_start).where(RFQ.data_ricezione <= date_end)
+            for w in extra:
+                stmt = stmt.where(w)
+            return db.scalar(stmt) or 0
 
-        recent_rfq = db.execute(
-            select(RFQ).where(RFQ.stato != "obsoleta").order_by(RFQ.id.desc()).limit(5)
-        ).scalars().all()
-        recent_off = db.execute(
-            select(Offerta)
-            .options(selectinload(Offerta.rfq))
-            .order_by(Offerta.id.desc())
-            .limit(5)
-        ).scalars().all()
+        total_rfq_ricevute = _rfq_count()
+        total_rfq_attive   = _rfq_count(RFQ.stato == "attiva")
 
+        off_stmt = select(func.count()).select_from(Offerta)
+        if date_start:
+            off_stmt = off_stmt.where(Offerta.data_offerta >= date_start).where(Offerta.data_offerta <= date_end)
+        total_offerte = db.scalar(off_stmt) or 0
+
+        stati = ("attiva", "inattiva", "vinta", "persa", "non_gestita", "obsoleta")
+        rfq_status_counts = {s: _rfq_count(RFQ.stato == s) for s in stati}
+
+        # RFQ recenti (filtrate per anno se selezionato, escluse obsolete)
+        rfq_recent_stmt = select(RFQ).where(RFQ.stato != "obsoleta")
+        if date_start:
+            rfq_recent_stmt = rfq_recent_stmt.where(
+                RFQ.data_ricezione >= date_start).where(RFQ.data_ricezione <= date_end)
+        recent_rfq = db.execute(rfq_recent_stmt.order_by(RFQ.id.desc()).limit(5)).scalars().all()
+
+        # Offerte recenti (filtrate per anno se selezionato)
+        off_recent_stmt = select(Offerta).options(selectinload(Offerta.rfq))
+        if date_start:
+            off_recent_stmt = off_recent_stmt.where(
+                Offerta.data_offerta >= date_start).where(Offerta.data_offerta <= date_end)
+        recent_off = db.execute(off_recent_stmt.order_by(Offerta.id.desc()).limit(5)).scalars().all()
+
+        # Pipeline: sempre globale (basata su anno_sop, non sulla data ricezione)
         pipeline_attive = _pipeline_per_anno("attiva", db)
-        pipeline_vinte = _pipeline_per_anno("vinta", db)
+        pipeline_vinte  = _pipeline_per_anno("vinta",  db)
 
     return render_template(
         "dashboard.html",
-        total_rfq=total_rfq,
+        anno=anno_filter,
+        total_rfq_ricevute=total_rfq_ricevute,
+        total_rfq_attive=total_rfq_attive,
         total_offerte=total_offerte,
         rfq_status_counts=rfq_status_counts,
         recent_rfq=recent_rfq,

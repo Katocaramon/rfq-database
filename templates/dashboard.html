@@ -14,8 +14,10 @@
 <div style="display:flex; gap:1em; flex-wrap:wrap; margin-bottom:1.5em;">
   <div class="card" style="background:#e8f8f5;">🟢 Attive: <strong>{{ rfq_status_counts.attiva }}</strong></div>
   <div class="card" style="background:#fef9e7;">🟡 Inattive: <strong>{{ rfq_status_counts.inattiva }}</strong></div>
-  <div class="card" style="background:#e8f6f3;">🏆 Vinte: <strong>{{ rfq_status_counts.vinta }}</strong></div>
+  <div class="card" style="background:#e3f0fd;">🏆 Vinte: <strong>{{ rfq_status_counts.vinta }}</strong></div>
   <div class="card" style="background:#fdecea;">❌ Perse: <strong>{{ rfq_status_counts.persa }}</strong></div>
+  <div class="card" style="background:#fff3cd;">⏸️ Non gestite: <strong>{{ rfq_status_counts.non_gestita }}</strong></div>
+  <div class="card" style="background:#f3f3f3;">🗂 Obsolete: <strong>{{ rfq_status_counts.obsoleta }}</strong></div>
 </div>
 
 <!-- 📉 Grafico compatto -->
@@ -23,6 +25,78 @@
   <div style="width:220px; height:220px;">
     <canvas id="rfqChart"></canvas>
   </div>
+</div>
+
+<hr>
+
+<!-- ====== Pipeline Opportunity ====== -->
+<h3>🚀 Pipeline Opportunity</h3>
+
+{% macro pipeline_table(pipeline, label, color) %}
+<div style="flex:1; min-width:280px;">
+  <h4 style="color:{{ color }}; margin-bottom:0.5em;">{{ label }}</h4>
+  {% if pipeline %}
+  <table class="thin" style="width:100%; border-collapse:collapse;">
+    <thead>
+      <tr style="background:#f9f9f9;">
+        <th>Anno SOP</th>
+        <th style="text-align:right;">Revenue K€</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set ns = namespace(total=0) %}
+      {% for anno, keur in pipeline.items() %}
+      {% set ns.total = ns.total + keur %}
+      <tr>
+        <td>{{ anno }}</td>
+        <td style="text-align:right; font-weight:600;">{{ '%.1f'|format(keur) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr style="border-top:2px solid {{ color }};">
+        <td><strong>Totale</strong></td>
+        <td style="text-align:right; font-weight:700; color:{{ color }};">{{ '%.1f'|format(ns.total) }} K€</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <!-- Bar chart sparkline -->
+  <div style="margin-top:0.6em; height:80px;">
+    <canvas id="chart_{{ label|replace(' ','_') }}"></canvas>
+  </div>
+  <script>
+  (function() {
+    const ctx = document.getElementById('chart_{{ label|replace(' ','_') }}').getContext('2d');
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: [{% for anno in pipeline.keys() %}"{{ anno }}"{% if not loop.last %},{% endif %}{% endfor %}],
+        datasets: [{
+          data: [{% for keur in pipeline.values() %}{{ '%.1f'|format(keur) }}{% if not loop.last %},{% endif %}{% endfor %}],
+          backgroundColor: '{{ color }}55',
+          borderColor: '{{ color }}',
+          borderWidth: 1,
+        }]
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        responsive: true, maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true, ticks: { font: { size: 10 } } }, x: { ticks: { font: { size: 10 } } } }
+      }
+    });
+  })();
+  </script>
+
+  {% else %}
+  <p style="color:#aaa; font-size:0.9em;"><em>Nessuna opportunità con Anno SOP impostato.</em></p>
+  {% endif %}
+</div>
+{% endmacro %}
+
+<div style="display:flex; gap:2em; flex-wrap:wrap; margin-bottom:2em;">
+  {{ pipeline_table(pipeline_attive, "Pipeline Attive", "#e85e00") }}
+  {{ pipeline_table(pipeline_vinte,  "Pipeline Vinte",  "#1a73e8") }}
 </div>
 
 <hr>

@@ -5,7 +5,7 @@
   {{ '✏️ Modifica RFQ' if item else '➕ Nuova RFQ' }}
 </h2>
 
-<form method="post" class="rfq-form">
+<form method="post" class="rfq-form" id="rfqForm">
   <input type="hidden" name="id" value="{{ item.id if item else '' }}">
 
   <div class="form-grid">
@@ -17,29 +17,51 @@
       <input name="nome_progetto" value="{{ item.nome_progetto if item else '' }}" required>
     </label>
 
-    <label>Data ricezione:
+    <label>Data ricezione
       <input type="date" name="data_ricezione"
              value="{{ (item.data_ricezione if item else date.today()).strftime('%Y-%m-%d') }}">
     </label>
 
-    <label>Due date quotazione:
+    <label>Due date quotazione
       <input type="date" name="due_date_quotazione"
              value="{{ (item.due_date_quotazione if item and item.due_date_quotazione else date.today()).strftime('%Y-%m-%d') }}">
     </label>
 
     <label>Target price (€)
-      <input type="number" name="target_price" step="0.01" min="0"
+      <input type="number" name="target_price" step="0.001" min="0"
              value="{{ item.target_price if item and item.target_price is not none else '' }}"
              placeholder="facoltativo">
     </label>
 
-    <!-- ✅ Campo nuovo: selezione stato RFQ -->
+    <label>Anno SOP
+      <input type="number" name="anno_sop" min="2020" max="2040" placeholder="es. 2027"
+             value="{{ item.anno_sop if item and item.anno_sop else '' }}"
+             title="Anno di avvio produttivo — usato per la pipeline">
+    </label>
+
     <label>Stato RFQ
-      <select name="stato" required>
-        <option value="attiva"   {% if not item or item.stato == 'attiva' %}selected{% endif %}>Attiva</option>
-        <option value="inattiva" {% if item and item.stato == 'inattiva' %}selected{% endif %}>Inattiva</option>
-        <option value="vinta"    {% if item and item.stato == 'vinta' %}selected{% endif %}>Vinta</option>
-        <option value="persa"    {% if item and item.stato == 'persa' %}selected{% endif %}>Persa</option>
+      <select name="stato" id="statoSelect" onchange="toggleMotivo()" required>
+        {% for s in ['attiva','inattiva','vinta','persa','non_gestita','obsoleta'] %}
+          <option value="{{ s }}"
+            {% if (item and item.stato == s) or (not item and s == 'attiva') %}selected{% endif %}>
+            {{ s|replace('_',' ')|capitalize }}
+          </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <!-- Mostrato solo se stato = non_gestita -->
+    <label id="motivoLabel" style="display:none;">Motivo non gestione
+      <select name="motivo_non_gestione">
+        <option value="">— seleziona —</option>
+        <option value="NON-STRATEGICA"
+          {% if item and item.motivo_non_gestione == 'NON-STRATEGICA' %}selected{% endif %}>
+          NON-STRATEGICA
+        </option>
+        <option value="MANCANZA-RISORSE"
+          {% if item and item.motivo_non_gestione == 'MANCANZA-RISORSE' %}selected{% endif %}>
+          MANCANZA RISORSE
+        </option>
       </select>
     </label>
   </div>
@@ -53,5 +75,15 @@
     <a class="btn" href="{{ url_for('rfq_list') }}">Annulla</a>
   </div>
 </form>
+
+<script>
+function toggleMotivo() {
+  const stato = document.getElementById('statoSelect').value;
+  document.getElementById('motivoLabel').style.display =
+    stato === 'non_gestita' ? 'block' : 'none';
+}
+// Imposta stato iniziale
+toggleMotivo();
+</script>
 
 {% endblock %}

@@ -1,27 +1,41 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h2 style="margin-bottom:0.4em;">{{ rfq.nome_cliente }} — {{ rfq.nome_progetto }}</h2>
+<h2 style="margin-bottom:0.2em;">
+  {{ rfq.nome_cliente }} — {{ rfq.nome_progetto }}
+  {% if rfq.numero_revisione > 1 %}
+    <span style="font-size:0.6em; background:#fff3cd; color:#856404; padding:3px 8px; border-radius:10px; vertical-align:middle; margin-left:0.4em;">Rev.{{ rfq.numero_revisione }}</span>
+  {% endif %}
+</h2>
 
 <!-- Stato RFQ + cambio rapido -->
-<div style="margin-bottom:0.8em;">
-  <form method="post" action="{{ url_for('rfq_set_state', rfq_id=rfq.id) }}" style="display:inline;">
-    <label><strong>🟢 Stato RFQ:</strong></label>
-    <select name="stato" onchange="this.form.submit()" style="padding:4px 8px; margin-left:0.4em;">
-      {% for s in ['attiva','inattiva','vinta','persa'] %}
-        <option value="{{ s }}" {% if rfq.stato == s %}selected{% endif %}>{{ s|capitalize }}</option>
+<div style="margin-bottom:0.8em; display:flex; align-items:center; gap:1em; flex-wrap:wrap;">
+  <form method="post" action="{{ url_for('rfq_set_state', rfq_id=rfq.id) }}" style="display:flex; align-items:center; gap:0.4em;">
+    <label style="margin:0;"><strong>Stato RFQ:</strong></label>
+    <select name="stato" onchange="this.form.submit()" style="padding:4px 8px;">
+      {% for s in ['attiva','inattiva','vinta','persa','non_gestita','obsoleta'] %}
+        <option value="{{ s }}" {% if rfq.stato == s %}selected{% endif %}>{{ s|replace('_',' ')|capitalize }}</option>
       {% endfor %}
     </select>
   </form>
+
+  {% if rfq.stato == 'non_gestita' and rfq.motivo_non_gestione %}
+    <span style="background:#fff3cd; color:#856404; padding:3px 10px; border-radius:12px; font-size:0.85em;">
+      {{ rfq.motivo_non_gestione }}
+    </span>
+  {% endif %}
 </div>
 
-<p style="color:#555;">
+<p style="color:#555; margin:0.2em 0 0.4em 0;">
   📅 Ricezione: {{ rfq.data_ricezione.strftime('%Y-%m-%d') if rfq.data_ricezione else '' }} |
   ⏰ Due: {{ rfq.due_date_quotazione.strftime('%Y-%m-%d') if rfq.due_date_quotazione else '' }} |
-  🎯 Target: {{ '%.2f'|format(rfq.target_price) if rfq.target_price is not none else '-' }}
+  🎯 Target: {{ '%.3f'|format(rfq.target_price) if rfq.target_price is not none else '-' }} |
+  🗓 Anno SOP: <strong>{{ rfq.anno_sop or '—' }}</strong>
 </p>
 
-<p>{{ rfq.descrizione or '' }}</p>
+<p style="color:#555; margin:0.2em 0 0.8em 0;">
+  {{ rfq.descrizione or '' }}
+</p>
 
 <hr>
 
@@ -49,13 +63,31 @@
   <p><em>Nessun documento caricato.</em></p>
 {% endif %}
 
-<!-- 🔐 Eliminazione RFQ -->
-<div style="margin-top:1em; padding:0.8em; background:#fff3f0; border:1px solid #f1b0b7; border-radius:6px;">
-  <h4 style="margin:0 0 0.5em 0; color:#c0392b;">⚠️ Eliminazione RFQ</h4>
-  <form id="deleteRFQForm" action="{{ url_for('rfq_delete', rfq_id=rfq.id) }}" method="post">
-    <input type="hidden" name="auth_code" id="rfqAuthCode">
-    <button type="button" class="btn" style="background:#e74c3c;color:white;" onclick="askAuthCodeRFQ()">🗑️ Elimina RFQ</button>
-  </form>
+<!-- 🔁 Revisione RFQ + Eliminazione -->
+<div style="display:flex; gap:1em; flex-wrap:wrap; margin-top:1em;">
+
+  {% if rfq.stato != 'obsoleta' %}
+  <div style="padding:0.8em; background:#f0f7ff; border:1px solid #b0c8e8; border-radius:6px; flex:1; min-width:240px;">
+    <h4 style="margin:0 0 0.4em 0; color:#1a5fb4;">🔁 Crea Revisione RFQ</h4>
+    <p style="margin:0 0 0.6em 0; font-size:0.88em; color:#555;">
+      Clona i dati di questa RFQ in una nuova Rev.{{ rfq.numero_revisione + 1 }}.
+      La revisione attuale verrà impostata come <strong>OBSOLETA</strong>.
+    </p>
+    <form action="{{ url_for('rfq_clone_rev', rfq_id=rfq.id) }}" method="post"
+          onsubmit="return confirm('Creare revisione Rev.{{ rfq.numero_revisione + 1 }}?\nQuesta RFQ diventerà OBSOLETA.');">
+      <button class="btn" style="background:#1a73e8;">📋 Crea Rev.{{ rfq.numero_revisione + 1 }}</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <div style="padding:0.8em; background:#fff3f0; border:1px solid #f1b0b7; border-radius:6px; flex:1; min-width:240px;">
+    <h4 style="margin:0 0 0.4em 0; color:#c0392b;">⚠️ Eliminazione RFQ</h4>
+    <form id="deleteRFQForm" action="{{ url_for('rfq_delete', rfq_id=rfq.id) }}" method="post">
+      <input type="hidden" name="auth_code" id="rfqAuthCode">
+      <button type="button" class="btn" style="background:#e74c3c;color:white;" onclick="askAuthCodeRFQ()">🗑️ Elimina RFQ</button>
+    </form>
+  </div>
+
 </div>
 
 <hr style="margin:2em 0 1em 0;">

@@ -98,6 +98,35 @@ with SessionLocal() as db:
 
 
 # ----------------------------
+# Pipeline helper
+# ----------------------------
+def _pipeline_per_anno(stato_rfq: str, db) -> dict:
+    """Ritorna {anno_sop: K€} per le RFQ con lo stato dato, usando l'offerta attiva più recente."""
+    rfqs = db.execute(
+        select(RFQ)
+        .where(RFQ.stato == stato_rfq)
+        .where(RFQ.anno_sop.isnot(None))
+    ).scalars().all()
+
+    pipeline: dict[int, float] = {}
+    for rfq in rfqs:
+        latest = db.execute(
+            select(Offerta)
+            .where(Offerta.rfq_id == rfq.id)
+            .where(Offerta.stato == "attiva")
+            .order_by(Offerta.id_offerta_rev.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if latest:
+            fatt_total = sum(v or 0 for v in [
+                latest.fatt_sop, latest.fatt_sop1, latest.fatt_sop2,
+                latest.fatt_sop3, latest.fatt_sop4,
+            ])
+            pipeline[rfq.anno_sop] = pipeline.get(rfq.anno_sop, 0) + fatt_total / 1000
+    return dict(sorted(pipeline.items()))
+
+
+# ----------------------------
 # Utility per rimozione file/allegati
 # ----------------------------
 def _safe_remove_file(path: str):
@@ -149,30 +178,30 @@ def _delete_rfq_offerte_and_docs(db, rfq: RFQ):
 @login_required
 def dashboard():
     with SessionLocal() as db:
-        # Totali generali
-        total_rfq = db.scalar(select(func.count()).select_from(RFQ)) or 0
+        # Totali (escluse obsolete e non_gestite)
+        stati_attivi = ("attiva", "inattiva", "vinta", "persa")
+        total_rfq = db.scalar(
+            select(func.count()).select_from(RFQ).where(RFQ.stato.in_(stati_attivi))
+        ) or 0
         total_offerte = db.scalar(select(func.count()).select_from(Offerta)) or 0
 
-        # Conteggi per stato RFQ
         rfq_status_counts = {
-            "attiva": db.scalar(select(func.count()).where(RFQ.stato == "attiva")) or 0,
-            "inattiva": db.scalar(select(func.count()).where(RFQ.stato == "inattiva")) or 0,
-            "vinta": db.scalar(select(func.count()).where(RFQ.stato == "vinta")) or 0,
-            "persa": db.scalar(select(func.count()).where(RFQ.stato == "persa")) or 0,
+            s: db.scalar(select(func.count()).where(RFQ.stato == s)) or 0
+            for s in ("attiva", "inattiva", "vinta", "persa", "non_gestita", "obsoleta")
         }
 
-        # RFQ recenti e offerte recenti
-        recent_rfq = db.execute(select(RFQ).order_by(RFQ.id.desc()).limit(5)).scalars().all()
-        recent_off = (
-            db.execute(
-                select(Offerta)
-                .options(selectinload(Offerta.rfq))
-                .order_by(Offerta.id.desc())
-                .limit(5)
-            )
-            .scalars()
-            .all()
-        )
+        recent_rfq = db.execute(
+            select(RFQ).where(RFQ.stato != "obsoleta").order_by(RFQ.id.desc()).limit(5)
+        ).scalars().all()
+        recent_off = db.execute(
+            select(Offerta)
+            .options(selectinload(Offerta.rfq))
+            .order_by(Offerta.id.desc())
+            .limit(5)
+        ).scalars().all()
+
+        pipeline_attive = _pipeline_per_anno("attiva", db)
+        pipeline_vinte = _pipeline_per_anno("vinta", db)
 
     return render_template(
         "dashboard.html",
@@ -181,6 +210,8 @@ def dashboard():
         rfq_status_counts=rfq_status_counts,
         recent_rfq=recent_rfq,
         recent_off=recent_off,
+        pipeline_attive=pipeline_attive,
+        pipeline_vinte=pipeline_vinte,
     )
 
 
@@ -191,15 +222,61 @@ def dashboard():
 @login_required
 def rfq_list():
     q = request.args.get("q", "").strip()
+    anno_filter = request.args.get("anno", "").strip()
+    mostra_obsolete = request.args.get("mostra_obsolete", "0") == "1"
+
     with SessionLocal() as db:
         stmt = select(RFQ)
+
         if q:
             like = f"%{q}%"
             stmt = stmt.where(or_(RFQ.nome_cliente.ilike(like), RFQ.nome_progetto.ilike(like)))
-        rfqs = db.execute(
-            stmt.order_by(RFQ.nome_cliente, RFQ.nome_progetto)
-        ).scalars().all()
-    return render_template("rfq_list.html", rfqs=rfqs, q=q)
+
+        if anno_filter:
+            try:
+                anno_int = int(anno_filter)
+                start = date(anno_int, 1, 1)
+                end = date(anno_int, 12, 31)
+                stmt = stmt.where(RFQ.data_ricezione >= start).where(RFQ.data_ricezione <= end)
+            except ValueError:
+                anno_filter = ""
+
+        if not mostra_obsolete:
+            stmt = stmt.where(RFQ.stato != "obsoleta")
+
+        rfqs = db.execute(stmt.order_by(RFQ.nome_cliente, RFQ.nome_progetto)).scalars().all()
+
+        # Statistiche anno
+        anno_stats = None
+        if anno_filter:
+            anno_int = int(anno_filter)
+            start_d = date(anno_int, 1, 1)
+            end_d = date(anno_int, 12, 31)
+            rfqs_anno = db.execute(
+                select(RFQ).where(RFQ.data_ricezione >= start_d).where(RFQ.data_ricezione <= end_d)
+            ).scalars().all()
+            by_stato: dict[str, int] = {}
+            for r in rfqs_anno:
+                by_stato[r.stato] = by_stato.get(r.stato, 0) + 1
+            offerte_anno = db.scalar(
+                select(func.count()).select_from(Offerta)
+                .where(Offerta.data_offerta >= start_d)
+                .where(Offerta.data_offerta <= end_d)
+            ) or 0
+            anno_stats = {
+                "anno": anno_int,
+                "total_rfq": len(rfqs_anno),
+                "total_offerte": offerte_anno,
+                "by_stato": by_stato,
+            }
+
+    return render_template(
+        "rfq_list.html",
+        rfqs=rfqs, q=q,
+        anno=anno_filter,
+        mostra_obsolete=mostra_obsolete,
+        anno_stats=anno_stats,
+    )
 
 
 @app.route("/rfq/new", methods=["GET", "POST"])
@@ -207,6 +284,8 @@ def rfq_list():
 def rfq_new():
     if request.method == "POST":
         with SessionLocal() as db:
+            stato = request.form.get("stato", "attiva")
+            anno_sop_s = request.form.get("anno_sop", "").strip()
             r = RFQ(
                 nome_cliente=request.form["nome_cliente"].strip(),
                 nome_progetto=request.form["nome_progetto"].strip(),
@@ -214,6 +293,9 @@ def rfq_new():
                 due_date_quotazione=parse_date(request.form.get("due_date_quotazione")),
                 target_price=float(request.form["target_price"]) if request.form.get("target_price") else None,
                 descrizione=request.form.get("descrizione"),
+                stato=stato,
+                anno_sop=int(anno_sop_s) if anno_sop_s.isdigit() else None,
+                motivo_non_gestione=request.form.get("motivo_non_gestione") if stato == "non_gestita" else None,
             )
             db.add(r)
             try:
@@ -235,12 +317,17 @@ def rfq_edit(rfq_id):
             flash("RFQ non trovata ❌", "warning")
             return redirect(url_for("rfq_list"))
         if request.method == "POST":
+            stato = request.form.get("stato", "attiva")
+            anno_sop_s = request.form.get("anno_sop", "").strip()
             r.nome_cliente = request.form["nome_cliente"].strip()
             r.nome_progetto = request.form["nome_progetto"].strip()
             r.data_ricezione = parse_date(request.form.get("data_ricezione"))
             r.due_date_quotazione = parse_date(request.form.get("due_date_quotazione"))
             r.target_price = float(request.form["target_price"]) if request.form.get("target_price") else None
             r.descrizione = request.form.get("descrizione")
+            r.stato = stato
+            r.anno_sop = int(anno_sop_s) if anno_sop_s.isdigit() else None
+            r.motivo_non_gestione = request.form.get("motivo_non_gestione") if stato == "non_gestita" else None
             try:
                 db.commit()
                 flash("RFQ aggiornata correttamente ✅", "success")
@@ -279,7 +366,7 @@ def rfq_set_state(rfq_id):
     """Aggiorna rapidamente lo stato della RFQ (attiva, inattiva, vinta, persa)."""
     new_state = request.form.get("stato")
 
-    if new_state not in ("attiva", "inattiva", "vinta", "persa"):
+    if new_state not in ("attiva", "inattiva", "vinta", "persa", "non_gestita", "obsoleta"):
         flash("⚠️ Stato non valido.", "warning")
         return redirect(url_for("rfq_detail", rfq_id=rfq_id))
 
@@ -313,6 +400,46 @@ def rfq_delete(rfq_id):
 
     flash("RFQ, offerte e allegati eliminati ✅", "success")
     return redirect(url_for("rfq_list"))
+
+
+@app.route("/rfq/<int:rfq_id>/clone_rev", methods=["POST"])
+@login_required
+def rfq_clone_rev(rfq_id):
+    """Crea una nuova revisione della RFQ (dati clonati, nessuna offerta) e mette l'originale in OBSOLETA."""
+    with SessionLocal() as db:
+        r = db.get(RFQ, rfq_id)
+        if not r:
+            flash("RFQ non trovata", "warning")
+            return redirect(url_for("rfq_list"))
+        if r.stato == "obsoleta":
+            flash("Non puoi creare una revisione di una RFQ già obsoleta.", "warning")
+            return redirect(url_for("rfq_detail", rfq_id=rfq_id))
+
+        new_rev = r.numero_revisione + 1
+        new_rfq = RFQ(
+            nome_cliente=r.nome_cliente,
+            nome_progetto=r.nome_progetto,
+            data_ricezione=date.today(),
+            due_date_quotazione=r.due_date_quotazione,
+            target_price=r.target_price,
+            descrizione=r.descrizione,
+            stato="attiva",
+            anno_sop=r.anno_sop,
+            motivo_non_gestione=None,
+            numero_revisione=new_rev,
+            rfq_padre_id=r.id,
+        )
+        r.stato = "obsoleta"
+        db.add(new_rfq)
+        try:
+            db.commit()
+            db.refresh(new_rfq)
+            flash(f"✅ Creata revisione Rev.{new_rev} — la precedente è stata impostata come OBSOLETA", "success")
+            return redirect(url_for("rfq_detail", rfq_id=new_rfq.id))
+        except Exception as e:
+            db.rollback()
+            flash(f"Errore durante la clonazione: {e}", "danger")
+            return redirect(url_for("rfq_detail", rfq_id=rfq_id))
 
 
 # ----------------------------
